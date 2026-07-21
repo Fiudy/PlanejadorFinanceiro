@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Coleções planas no nível raiz, cada documento com um campo "userId".
+// Cada usuário só pode ler/escrever documentos onde userId == seu uid.
+// cardPurchases não tem userId direto no filtro de leitura da app (é
+// buscado por cardId), mas ainda grava userId — a regra abaixo cobre
+// os dois casos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(resourceData) {
+      return request.auth != null && request.auth.uid == resourceData.userId;
+    }
+
+    match /accounts/{accountId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /categories/{categoryId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /transactions/{transactionId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /cards/{cardId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /cardPurchases/{purchaseId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /recurringBills/{billId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+
+    match /goals/{goalId} {
+      allow read, update, delete: if isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+    }
+  }
+}

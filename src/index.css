@@ -1,0 +1,294 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600&family=Sora:wght@500;600&display=swap");
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Sistema de tokens — identidade visual "banco digital sóbrio":
+  tinta (ink) profunda em vez de preto puro, um único acento (esmeralda)
+  para tudo que é positivo/ação, e coral reservado exclusivamente para
+  saída de dinheiro / alertas. Números e headings usam Sora (tabular),
+  o resto da interface usa Plus Jakarta Sans.
+*/
+@theme {
+  --font-display: "Sora", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --gradient-accent: linear-gradient(135deg, var(--color-accent-400) 0%, var(--color-accent-600) 100%);
+
+  /* Curva "premium" única para transições CSS e GSAP (ver shared/lib/gsap.ts). */
+  --default-transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --color-ink-950: #0b1220;
+  --color-ink-900: #101a2e;
+  --color-ink-800: #16233d;
+  --color-ink-700: #1f3050;
+
+  --color-paper-50: #f6f7f9;
+  --color-paper-100: #eef0f4;
+
+  --color-accent-600: #0a6a4c;
+  --color-accent-500: #0f7b5c;
+  --color-accent-400: #26a37c;
+  --color-accent-100: #e1f3ea;
+
+  --color-coral-600: #d33a3f;
+  --color-coral-500: #e5484d;
+  --color-coral-100: #fbe4e4;
+
+  /* Terceiro acento — neutro, para métricas que não são nem positivas nem negativas. */
+  --color-amber-600: #c9741f;
+  --color-amber-500: #e08e45;
+  --color-amber-100: #fbe9db;
+
+  --color-muted-500: #64748b;
+  --color-muted-300: #a3aebd;
+
+  --color-border-light: #e4e7ec;
+  --color-border-dark: #232b3a;
+
+  --radius-card: 1rem;
+  --radius-control: 0.65rem;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    scroll-padding-top: 6rem;
+  }
+
+  /* Fundo com gradiente mesh — base do glassmorphism das superfícies
+     (Card, Dialog, bottom nav) em todas as páginas. Fixo para não
+     repetir/cortar em telas com scroll longo. */
+  body {
+    @apply relative text-ink-950 antialiased dark:text-paper-50;
+    font-family: var(--font-sans);
+    background: linear-gradient(135deg, #f6f7f9 0%, #eaf4ef 60%, #e3f3eb 100%);
+    background-attachment: fixed;
+  }
+
+  /* "Refined Glass" — base quase-preta com dois glows ambiente fixos e grain estático. */
+  .dark body {
+    background-color: #061510;
+    background-image:
+      radial-gradient(circle 720px at -8% 5%, rgba(38, 163, 124, 0.20) 0%, rgba(15, 123, 92, 0.08) 38%, transparent 70%),
+      radial-gradient(circle 760px at 108% 95%, rgba(10, 106, 76, 0.18) 0%, rgba(6, 52, 39, 0.07) 42%, transparent 72%),
+      linear-gradient(145deg, #071a14 0%, #0a2119 48%, #06130f 100%);
+    background-attachment: fixed;
+  }
+
+  .dark body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.35;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+    background-repeat: repeat;
+    background-size: 120px 120px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-500;
+  }
+
+  * {
+    @apply border-border-light dark:border-border-dark;
+  }
+
+  ::selection {
+    @apply bg-accent-100 text-accent-600;
+  }
+
+  /* Scrollbar — fina, discreta, no tom da identidade visual */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-muted-300) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: var(--color-ink-700) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-muted-300);
+    border-radius: 999px;
+    border: 2px solid var(--color-paper-50);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-500);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background-color: var(--color-ink-700);
+    border-color: var(--color-ink-950);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-500);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Options nativas do <select> — estilo consistente com o tema */
+  select option {
+    background-color: #ffffff;
+    color: var(--color-ink-950);
+    padding: 0.5rem;
+  }
+
+  .dark select option {
+    background-color: var(--color-ink-800);
+    color: var(--color-paper-50);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hidden {
+    scrollbar-width: none;
+  }
+
+  /* Superfície de vidro (glass-strong) — dashboard, hero, modais. Fundo
+     sólido por padrão (fallback), vira translúcida + desfocada apenas
+     onde backdrop-filter é suportado. No dark, é a "Liquid Glass Card":
+     blur 35px, gradiente sutil e borda em degradê via pseudo-elemento. */
+  .glass {
+    position: relative;
+    background: var(--color-paper-50);
+    border-top: 1px solid var(--color-border-light);
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .glass {
+    background: #0b211a;
+    border-top-color: rgba(72, 151, 123, 0.22);
+  }
+
+  /* Texto sólido e legível em ambos os temas; componentes antigos usam text-white. */
+  .glass .text-white { color: var(--color-ink-950); }
+  .dark .glass .text-white { color: #fff; }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass {
+      background: rgba(255, 255, 255, 0.55);
+      border-top-color: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+    }
+
+    .dark .glass {
+      background: linear-gradient(180deg, rgba(31, 91, 70, 0.34), rgba(8, 37, 28, 0.62));
+      border-top-color: transparent;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 8px 32px rgba(2, 20, 14, 0.30);
+      backdrop-filter: blur(35px) saturate(150%);
+      -webkit-backdrop-filter: blur(35px) saturate(150%);
+    }
+
+    .dark .glass::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.02) 35%, rgba(255, 255, 255, 0) 60%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+  }
+
+  /* Superfície de vidro leve (glass-soft) — chrome de navegação (sidebar,
+     topbar, bottom nav): mesmo espírito, blur e opacidade mais discretos. */
+  .glass-soft {
+    background: var(--color-paper-50);
+  }
+
+  .dark .glass-soft {
+    background: #0a2018;
+  }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass-soft {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+    }
+
+    .dark .glass-soft {
+      background: rgba(8, 45, 33, 0.72);
+      backdrop-filter: blur(20px) saturate(110%);
+      -webkit-backdrop-filter: blur(20px) saturate(110%);
+    }
+  }
+
+  .bg-gradient-accent {
+    background-image: var(--gradient-accent);
+  }
+
+  .balance-line {
+    stroke-dasharray: 12 7;
+    animation: line-shimmer 3s linear infinite;
+  }
+
+  .sidebar-card-float {
+    animation: card-float 5s ease-in-out infinite;
+  }
+
+  @keyframes line-shimmer { to { stroke-dashoffset: -38; } }
+  @keyframes card-float { 0%, 100% { transform: translateY(0) scale(.82); } 50% { transform: translateY(-6px) scale(.82); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .balance-line, .sidebar-card-float { animation: none; }
+    html { scroll-behavior: auto; }
+  }
+
+  /* Texto em gradiente com fallback de cor sólida para navegadores sem background-clip: text. */
+  .text-gradient-accent {
+    color: var(--color-accent-500);
+  }
+
+  .dark .text-gradient-accent {
+    color: var(--color-accent-400);
+  }
+
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .text-gradient-accent {
+      background-image: var(--gradient-accent);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+    }
+  }
+}
