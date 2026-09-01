@@ -102,37 +102,48 @@ async function fetchGemini(url: string, body: Record<string, unknown>): Promise<
   }
 }
 
+// Modelos tentados em ordem. "gemini-flash-latest" é um alias flutuante do Google que, na
+// prática, ficou apontando para uma versão/backend sobrecarregado (503 constante em 2026-09),
+// enquanto "gemini-3.6-flash" (nome fixo do modelo atual) responde normalmente — por isso ele
+// vem primeiro. Mantemos o alias como segunda tentativa: se um dia for o fixo que ficar
+// sobrecarregado, ainda tentamos o alias antes de desistir, sem precisar alterar código.
+const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-flash-latest"];
+
 /** Chama a API do Gemini direto do navegador (sem backend) e retorna o texto bruto da resposta.
- * Erros temporários (503/429/5xx) acionam retry automático com backoff exponencial (1s, 2s, 4s)
- * antes de desistir e lançar uma mensagem amigável — o erro técnico do Gemini nunca chega à UI. */
+ * Para cada modelo em GEMINI_MODELS, erros temporários (503/429/5xx) acionam retry automático
+ * com backoff exponencial (1s, 2s, 4s); se todas as tentativas de um modelo falharem, tenta o
+ * próximo modelo da lista antes de desistir e lançar uma mensagem amigável — o erro técnico do
+ * Gemini nunca chega à UI. */
 async function callGemini(body: Record<string, unknown>): Promise<string> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("Chave do Gemini não configurada (VITE_GEMINI_API_KEY).");
 
-  // Alias flutuante mantido pelo Google — evita quebrar quando uma versão específica
-  // (ex: gemini-2.5-flash) é descontinuada para chaves novas.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
-
-  let response: Response | null = null;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    response = await fetchGemini(url, body);
-    if (response.ok || !isRetryableStatus(response.status) || attempt === MAX_RETRIES) break;
-    console.warn(`Gemini indisponível (status ${response.status}), tentativa ${attempt + 1}/${MAX_RETRIES + 1}...`);
-    await sleep(BASE_RETRY_DELAY_MS * 2 ** attempt);
+  let response: Response | undefined;
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      response = await fetchGemini(url, body);
+      if (response.ok || !isRetryableStatus(response.status) || attempt === MAX_RETRIES) break;
+      console.warn(`Gemini (${model}) indisponível (status ${response.status}), tentativa ${attempt + 1}/${MAX_RETRIES + 1}...`);
+      await sleep(BASE_RETRY_DELAY_MS * 2 ** attempt);
+    }
+    // response sempre foi atribuída acima: o loop de tentativas roda ao menos uma vez.
+    if (response!.ok || !isRetryableStatus(response!.status)) break;
+    console.warn(`Gemini (${model}) esgotou as tentativas, tentando o próximo modelo...`);
   }
-  // response nunca é null aqui: o loop roda ao menos uma vez (attempt=0..MAX_RETRIES).
-  response = response!;
+  // response nunca é undefined aqui: GEMINI_MODELS e o loop de tentativas sempre rodam ao menos uma vez.
+  const finalResponse = response!;
 
-  if (!response.ok) {
+  if (!finalResponse.ok) {
     let detail = "";
     try {
-      const errorBody = (await response.json()) as { error?: { message?: string } };
+      const errorBody = (await finalResponse.json()) as { error?: { message?: string } };
       detail = errorBody.error?.message ?? "";
     } catch {
       /* corpo do erro não veio em JSON — segue sem detalhe extra */
     }
-    console.error("Gemini API retornou erro", response.status, detail);
-    if (isRetryableStatus(response.status)) throw new Error(GEMINI_UNAVAILABLE_MESSAGE);
+    console.error("Gemini API retornou erro", finalResponse.status, detail);
+    if (isRetryableStatus(finalResponse.status)) throw new Error(GEMINI_UNAVAILABLE_MESSAGE);
     throw new Error(
       detail
         ? `Não foi possível processar sua solicitação com a IA (${detail}).`
@@ -140,7 +151,7 @@ async function callGemini(body: Record<string, unknown>): Promise<string> {
     );
   }
 
-  const payload = (await response.json()) as {
+  const payload = (await finalResponse.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
   const rawText = payload.candidates?.[0]?.content?.parts?.[0]?.text;

@@ -73,7 +73,16 @@ export class FirebaseAuthService implements AuthService {
       if (code === "auth/account-exists-with-different-credential") {
         throw new Error("Este e-mail já usa outra forma de acesso. Entre por e-mail e senha ou redefina a senha.", { cause: error });
       }
-      throw error;
+      if (code === "auth/unauthorized-domain") {
+        throw new Error("Este endereço não está autorizado para login com Google. Avise o suporte (domínio não configurado no Firebase Authentication).", { cause: error });
+      }
+      if (code === "auth/operation-not-allowed") {
+        throw new Error("O login com Google não está habilitado neste momento. Avise o suporte.", { cause: error });
+      }
+      if (code === "auth/network-request-failed") {
+        throw new Error("Falha de conexão ao entrar com Google. Verifique sua internet e tente novamente.", { cause: error });
+      }
+      throw new Error("Não foi possível entrar com Google agora. Tente novamente ou use e-mail e senha.", { cause: error });
     }
   }
 

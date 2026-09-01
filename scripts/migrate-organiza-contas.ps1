@@ -167,7 +167,6 @@ foreach ($management in $managements) {
   $cards = Get-Documents $sourceProject "managements/$($management.id)/cards"
   $script:stats.transactionsFound += $transactions.Count
   $script:stats.cardsFound += $cards.Count
-  Write-Host "[debug] management $($management.id) name=$($management.name) members=$(@($management.memberIds).Count) cards=$($cards.Count) transactions=$($transactions.Count)" -ForegroundColor DarkGray
 
   foreach ($sourceMemberId in @($management.memberIds)) {
     $targetUid = if ($uidMap.ContainsKey([string]$sourceMemberId)) { $uidMap[[string]$sourceMemberId] } else { [string]$sourceMemberId }

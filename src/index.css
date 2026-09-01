@@ -303,21 +303,32 @@
 @layer components {
   .oc-app { --oc-ink:#17211e; --oc-muted:#66716d; --oc-line:#e5e9e7; --oc-paper:#f6f7f4; --oc-surface:#fff; --oc-green:#0f7b5c; --oc-green-dark:#0a5944; min-height:100dvh; background:var(--oc-paper); color:var(--oc-ink); font-family:"DM Sans",sans-serif; }
   .dark .oc-app { --oc-ink:#f1f3f7; --oc-muted:#9ca3ad; --oc-line:#292d35; --oc-paper:#08090b; --oc-surface:#111318; background:#08090b; }
-  .oc-shell { min-height:100dvh; display:grid; grid-template-columns:245px minmax(0,1fr); }
-  .oc-sidebar { position:sticky; top:0; height:100dvh; padding:20px 18px; display:flex; flex-direction:column; color:#fff; background:linear-gradient(180deg,#123e34 0%,#082a22 100%); border-right:1px solid rgba(255,255,255,.08); }
+  .oc-shell { min-height:100dvh; display:grid; grid-template-columns:245px minmax(0,1fr); transition:grid-template-columns .25s ease; }
+  .oc-shell.oc-sidebar-collapsed { grid-template-columns:84px minmax(0,1fr); }
+  .oc-sidebar { position:sticky; top:0; height:100dvh; padding:20px 18px; display:flex; flex-direction:column; color:#fff; background:linear-gradient(180deg,#123e34 0%,#082a22 100%); border-right:1px solid rgba(255,255,255,.08); overflow:hidden; transition:padding .25s ease; }
   .dark .oc-sidebar { background:linear-gradient(180deg,#0b0d11 0%,#030405 100%); border-color:#20242b; }
+  .oc-sidebar.collapsed { padding-left:14px; padding-right:14px; }
   .oc-brand { display:flex; align-items:center; gap:10px; padding:0 8px 20px; font:800 17px Manrope,sans-serif; color:#fff; }
   .oc-brand img { width:42px; height:42px; object-fit:contain; }
+  .oc-sidebar-toggle { flex:none; margin-left:auto; display:grid; place-items:center; width:28px; height:28px; border-radius:8px; color:#b9cec8; transition:.18s ease; }
+  .oc-sidebar-toggle:hover { background:rgba(255,255,255,.11); color:#fff; }
+  .oc-sidebar.collapsed .oc-brand { justify-content:center; padding-right:0; }
+  .oc-sidebar.collapsed .oc-brand span:not(.oc-sidebar-toggle) { display:none; }
+  .oc-sidebar.collapsed .oc-brand .oc-sidebar-toggle { margin-left:0; }
   .oc-profile { display:flex; align-items:center; gap:11px; padding:22px 10px; margin:0 0 14px; border-block:1px solid rgba(255,255,255,.12); }
   .oc-avatar { width:38px; height:38px; flex:none; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.13); font-weight:800; }
   .oc-profile div { min-width:0; display:flex; flex-direction:column; }
   .oc-profile b { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .oc-profile small { color:#a7c3bb; font-size:10px; }
+  .oc-sidebar.collapsed .oc-profile { justify-content:center; padding-inline:0; }
+  .oc-sidebar.collapsed .oc-profile div { display:none; }
   .oc-nav { display:flex; flex-direction:column; gap:3px; }
   .oc-nav-section { margin:18px 12px 5px; color:rgba(255,255,255,.42); font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
   .oc-nav-item { display:flex; align-items:center; gap:12px; min-height:44px; padding:11px 14px; border-radius:10px; color:#b9cec8; font-size:14px; font-weight:600; transition:.18s ease; }
   .oc-nav-item:hover,.oc-nav-item.active { background:rgba(255,255,255,.11); color:#fff; }
-  .oc-nav-item svg { width:18px; height:18px; stroke-width:1.8; }
+  .oc-nav-item svg { width:18px; height:18px; stroke-width:1.8; flex:none; }
+  .oc-sidebar.collapsed .oc-nav-item { justify-content:center; padding:11px 0; }
+  .oc-sidebar.collapsed .oc-nav-item span { display:none; }
   .oc-sidebar-bottom { margin-top:auto; display:grid; gap:4px; }
   .oc-workspace { min-width:0; padding:28px 42px 60px; overflow:auto; }
   .oc-workspace-head { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:34px; }

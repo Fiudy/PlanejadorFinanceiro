@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bot, CalendarDays, ChartNoAxesCombined, CreditCard, ListChecks, LayoutDashboard, LogOut, Mic, Moon, Plus, Settings, Sun, Target } from "lucide-react";
+import { Bot, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight, CreditCard, ListChecks, LayoutDashboard, LogOut, Mic, Moon, Plus, Settings, Sun, Target } from "lucide-react";
 import { useAuth } from "@/app/auth-context";
 import { useThemeStore } from "@/shared/theme/theme-store";
 import { LogoMark } from "@/shared/ui/logo";
@@ -34,6 +34,8 @@ function initials(name?: string) {
   return (name || "PF").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+const SIDEBAR_COLLAPSED_KEY = "planejador:sidebar-collapsed";
+
 export function AppShell() {
   const { user, signOut } = useAuth();
   const { mode, toggle } = useThemeStore();
@@ -41,6 +43,24 @@ export function AppShell() {
   const navigate = useNavigate();
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = () => {
+    setSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* localStorage indisponível (modo privado) — apenas não persiste a preferência */
+      }
+      return next;
+    });
+  };
   const [title, subtitle] = titles[pathname] ?? ["Planejador", "Organização financeira"];
 
   const startVoice = () => {
@@ -69,9 +89,20 @@ export function AppShell() {
 
   return <div className="oc-app">
     <div className="oc-mobile-head"><div className="flex items-center gap-2"><LogoMark/><b className="font-display">Planejador</b></div><button className="oc-ghost !h-9 !min-h-9 !px-3" onClick={toggle}>{mode === "dark" ? <Sun size={16}/> : <Moon size={16}/>}</button></div>
-    <div className="oc-shell">
-      <aside className="oc-sidebar">
-        <div className="oc-brand"><LogoMark/><span>Planejador</span></div>
+    <div className={cn("oc-shell", sidebarCollapsed && "oc-sidebar-collapsed")}>
+      <aside className={cn("oc-sidebar", sidebarCollapsed && "collapsed")}>
+        <div className="oc-brand">
+          <LogoMark/><span>Planejador</span>
+          <button
+            type="button"
+            className="oc-sidebar-toggle"
+            onClick={toggleSidebar}
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            {sidebarCollapsed ? <ChevronRight size={16}/> : <ChevronLeft size={16}/>}
+          </button>
+        </div>
         <div className="oc-profile"><span className="oc-avatar">{initials(user?.name)}</span><div><b>{user?.name || "Minha conta"}</b><small>{user?.email}</small></div></div>
         <nav className="oc-nav">{renderNav(primaryNav)}{renderNav(preservedNav)}</nav>
         <div className="oc-sidebar-bottom">
