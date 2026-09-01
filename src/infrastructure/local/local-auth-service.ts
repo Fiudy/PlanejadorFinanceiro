@@ -80,6 +80,18 @@ export class LocalAuthService implements AuthService {
     return identity;
   }
 
+  async signInWithGoogle(): Promise<AuthenticatedIdentity> {
+    throw new Error("A entrada com Google requer a configuração do Firebase.");
+  }
+
+  async sendPasswordReset(email: string): Promise<void> {
+    const exists = localStorageClient
+      .readAll<StoredCredential>(CREDENTIALS_COLLECTION)
+      .some((item) => item.email === email);
+    if (!exists) throw new Error("Não encontramos uma conta local com esse e-mail.");
+    throw new Error("A recuperação de senha requer a configuração do Firebase.");
+  }
+
   async signOut(): Promise<void> {
     localStorage.removeItem(SESSION_KEY);
     this.emit(null);

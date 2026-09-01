@@ -2,7 +2,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/app/auth-context";
 import { container } from "@/infrastructure/di/container";
 import type { TransactionFilters } from "@/domain/repositories/repositories";
-import type { TransactionType } from "@/domain/entities/transaction";
+import type { TransactionPriority, TransactionStatus, TransactionType } from "@/domain/entities/transaction";
+
+export interface TransactionInput {
+  accountId: string;
+  categoryId: string;
+  type: TransactionType;
+  amountCents: number;
+  description: string;
+  date: Date;
+  dueDate?: Date;
+  plannedDate?: Date;
+  settledAt?: Date;
+  status?: TransactionStatus;
+  priority?: TransactionPriority;
+  cardId?: string;
+  notes?: string;
+}
 
 export function useTransactions(filters?: TransactionFilters) {
   const { user } = useAuth();
@@ -18,14 +34,7 @@ export function useCreateTransaction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
-      accountId: string;
-      categoryId: string;
-      type: TransactionType;
-      amountCents: number;
-      description: string;
-      date: Date;
-    }) => container.transactions.create({ userId: user!.id, ...input }),
+    mutationFn: (input: TransactionInput) => container.transactions.create({ userId: user!.id, ...input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["transactions", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary", user?.id] });
@@ -41,15 +50,7 @@ export function useUpdateTransaction() {
     mutationFn: ({
       id,
       ...input
-    }: {
-      id: string;
-      accountId: string;
-      categoryId: string;
-      type: TransactionType;
-      amountCents: number;
-      description: string;
-      date: Date;
-    }) => container.transactions.update(id, input),
+    }: TransactionInput & { id: string }) => container.transactions.update(id, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["transactions", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary", user?.id] });

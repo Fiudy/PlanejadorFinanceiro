@@ -55,7 +55,7 @@ export function CardTile({
       )}
       style={{ backgroundColor: card.color, ...(selected ? { boxShadow: `0 0 0 2px ${card.color}` } : {}) }}
     >
-      <div className="flex min-h-8 items-center justify-between gap-3"><p className="text-xs uppercase tracking-wide text-white/70">{card.bank}</p>{bank && <span className="flex h-8 w-14 items-center justify-center rounded-lg bg-white/90 p-1.5"><img src={bank.logo} alt={bank.name} className="h-full w-full object-contain" /></span>}</div>
+      <div className="flex min-h-8 items-center justify-between gap-3"><p className="text-xs uppercase tracking-wide text-white/70">{card.bank}</p>{card.logoUrl || bank ? <span className="flex h-8 w-14 items-center justify-center rounded-lg bg-white/90 p-1.5"><img src={card.logoUrl || bank?.logo} alt={card.name} className="h-full w-full object-contain" /></span> : null}</div>
       <p className="mt-1 font-display text-lg font-semibold">{card.name}</p>
       <div className="mt-6 flex items-end justify-between">
         <div>
@@ -64,6 +64,7 @@ export function CardTile({
         </div>
         <p className="text-[11px] text-white/70">Vence dia {card.dueDay}</p>
       </div>
+      {card.holderName ? <p className="mt-3 truncate text-[10px] uppercase tracking-[.12em] text-white/65">Titular · {card.holderName}</p> : null}
       <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/20">
         <div className="h-full rounded-full bg-white/80" style={{ width: `${Math.min(100, Math.max(0, usedRatio * 100))}%` }} />
       </div>

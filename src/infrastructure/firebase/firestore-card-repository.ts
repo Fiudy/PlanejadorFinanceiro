@@ -38,7 +38,8 @@ export class FirestoreCardRepository implements CardRepository {
 
   async save(card: Card): Promise<void> {
     const { id, createdAt, ...rest } = card.toProps();
-    await setDoc(doc(getFirestoreDb(), CARDS, id), { ...rest, createdAt: createdAt.toISOString() });
+    const payload = { ...rest, createdAt: createdAt.toISOString() };
+    await setDoc(doc(getFirestoreDb(), CARDS, id), Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)));
   }
 
   async delete(id: string): Promise<void> {

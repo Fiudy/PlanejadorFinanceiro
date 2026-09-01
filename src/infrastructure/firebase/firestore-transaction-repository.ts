@@ -4,12 +4,12 @@ import { Transaction } from "@/domain/entities/transaction";
 import type { TransactionFilters, TransactionRepository } from "@/domain/repositories/repositories";
 import { getFirestoreDb } from "./firebase-config";
 
-type TransactionDoc = Omit<TransactionProps, "id" | "date" | "createdAt"> & { date: string; createdAt: string };
+type TransactionDoc = Omit<TransactionProps, "id" | "date" | "dueDate" | "plannedDate" | "settledAt" | "createdAt"> & { date: string; dueDate?: string; plannedDate?: string; settledAt?: string; createdAt: string };
 
 const COLLECTION = "transactions";
 
 function toDomain(id: string, data: TransactionDoc): Transaction {
-  return Transaction.fromProps({ ...data, id, date: new Date(data.date), createdAt: new Date(data.createdAt) });
+  return Transaction.fromProps({ ...data, id, date: new Date(data.date), dueDate: data.dueDate ? new Date(data.dueDate) : undefined, plannedDate: data.plannedDate ? new Date(data.plannedDate) : undefined, settledAt: data.settledAt ? new Date(data.settledAt) : undefined, createdAt: new Date(data.createdAt) });
 }
 
 export class FirestoreTransactionRepository implements TransactionRepository {
@@ -34,12 +34,16 @@ export class FirestoreTransactionRepository implements TransactionRepository {
 
   async save(transaction: Transaction): Promise<void> {
     const props = transaction.toProps();
-    const { id, date, createdAt, ...rest } = props;
-    await setDoc(doc(getFirestoreDb(), COLLECTION, id), {
+    const { id, date, dueDate, plannedDate, settledAt, createdAt, ...rest } = props;
+    const payload = {
       ...rest,
       date: date.toISOString(),
+      ...(dueDate ? { dueDate: dueDate.toISOString() } : {}),
+      ...(plannedDate ? { plannedDate: plannedDate.toISOString() } : {}),
+      ...(settledAt ? { settledAt: settledAt.toISOString() } : {}),
       createdAt: createdAt.toISOString(),
-    });
+    };
+    await setDoc(doc(getFirestoreDb(), COLLECTION, id), Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)));
   }
 
   async delete(id: string): Promise<void> {

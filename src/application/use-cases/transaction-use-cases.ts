@@ -1,5 +1,5 @@
 import { randomId } from "@/shared/lib/id";
-import type { TransactionType } from "@/domain/entities/transaction";
+import type { TransactionPriority, TransactionStatus, TransactionType } from "@/domain/entities/transaction";
 import { Transaction } from "@/domain/entities/transaction";
 import type { TransactionFilters, TransactionRepository } from "@/domain/repositories/repositories";
 
@@ -18,6 +18,13 @@ export class TransactionUseCases {
     amountCents: number;
     description: string;
     date: Date;
+    dueDate?: Date;
+    plannedDate?: Date;
+    settledAt?: Date;
+    status?: TransactionStatus;
+    priority?: TransactionPriority;
+    cardId?: string;
+    notes?: string;
     cardPurchaseId?: string;
   }) {
     const transaction = Transaction.create({ id: randomId(), ...input });
@@ -34,6 +41,13 @@ export class TransactionUseCases {
       amountCents: number;
       description: string;
       date: Date;
+      dueDate?: Date;
+      plannedDate?: Date;
+      settledAt?: Date;
+      status?: TransactionStatus;
+      priority?: TransactionPriority;
+      cardId?: string;
+      notes?: string;
     },
   ) {
     const existing = await this.transactions.findById(transactionId);

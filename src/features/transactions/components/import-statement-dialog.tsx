@@ -3,9 +3,11 @@ import { Sparkles, Trash2, Upload } from "lucide-react";
 import { Dialog } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
 import { Field, Input, Label } from "@/shared/ui/input";
+import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Select } from "@/shared/ui/select";
 import { PageSpinner } from "@/shared/ui/spinner";
 import { AccountSelect } from "@/features/accounts/components/account-select";
+import { CategorySelect } from "@/features/settings/components/category-select";
 import { useAccounts } from "@/features/accounts/hooks/use-accounts";
 import { useCategories } from "@/features/settings/hooks/use-categories";
 import { useCreateTransaction } from "../hooks/use-transactions";
@@ -16,6 +18,7 @@ import type { ParsedStatementItem } from "@/shared/lib/gemini";
 
 interface EditableItem extends ParsedStatementItem {
   id: string;
+  categoryId: string;
 }
 
 export function ImportStatementDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -52,7 +55,10 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
         setError("Não encontramos lançamentos nesse PDF. Verifique se é um extrato ou fatura.");
         return;
       }
-      setItems(parsed.map((item) => ({ ...item, id: randomId() })));
+      setItems(parsed.map((item) => {
+        const suggested = categories.find((category) => category.kind === item.type && item.categoryName && category.name.toLowerCase() === item.categoryName.toLowerCase());
+        return { ...item, id: randomId(), categoryId: suggested?.id ?? defaultCategoryFor(item.type)?.id ?? "" };
+      }));
     } catch (err) {
       setError(statementImportErrorMessage(err));
     }
@@ -79,15 +85,21 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
     setError(null);
     try {
       for (const item of items) {
-        const category = defaultCategoryFor(item.type);
-        if (!category) throw new Error("Nenhuma categoria disponível para atribuir aos lançamentos importados.");
+        if (!item.categoryId) throw new Error(`Escolha uma categoria para "${item.description}".`);
+        const plannedDate = item.date ? new Date(`${item.date}T12:00:00`) : new Date();
         await createTransaction.mutateAsync({
           accountId,
-          categoryId: category.id,
+          categoryId: item.categoryId,
           type: item.type,
           amountCents: item.amountCents,
           description: item.description,
-          date: item.date ? new Date(`${item.date}T12:00:00`) : new Date(),
+          date: plannedDate,
+          plannedDate,
+          dueDate: item.dueDate ? new Date(`${item.dueDate}T12:00:00`) : plannedDate,
+          settledAt: item.status === "pendente" ? undefined : plannedDate,
+          status: item.type === "receita" && item.status === "pago" ? "recebido" : item.type === "despesa" && item.status === "recebido" ? "pago" : item.status,
+          priority: item.type === "despesa" ? item.priority : undefined,
+          notes: item.notes || undefined,
         });
       }
       handleClose();
@@ -98,7 +110,7 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Importar extrato em PDF" className="sm:max-w-lg">
+    <Dialog open={open} onClose={handleClose} title="Importar extrato em PDF" className="sm:max-w-3xl">
       {!items && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-500">
@@ -133,9 +145,9 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
 
           <div className="flex flex-col gap-2">
             <Label>{items.length} lançamento(s) encontrado(s)</Label>
-            <ul className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+            <ul className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto pr-1">
               {items.map((item) => (
-                <li key={item.id} className="flex flex-col gap-2 rounded-[var(--radius-control)] border border-border-light p-3 dark:border-border-dark">
+                <li key={item.id} className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm dark:border-border-dark dark:bg-ink-900">
                   <div className="flex items-center gap-2">
                     <Input
                       value={item.description}
@@ -147,21 +159,29 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
                       <Trash2 className="h-4 w-4 text-coral-500" />
                     </Button>
                   </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <CategorySelect categories={categories.filter((category) => category.kind === item.type)} kind={item.type} value={item.categoryId} onChange={(value) => updateItem(item.id, { categoryId: value })} />
+                    <Select value={item.status} onChange={(event) => updateItem(item.id, { status: event.target.value as EditableItem["status"] })} aria-label="Status">
+                      <option value="pendente">Pendente</option>
+                      <option value={item.type === "receita" ? "recebido" : "pago"}>{item.type === "receita" ? "Recebido" : "Pago"}</option>
+                    </Select>
+                    <Input type="date" value={item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { dueDate: event.target.value || null })} aria-label="Vencimento ou recebimento" />
+                    {item.type === "despesa" ? <Select value={item.priority} onChange={(event) => updateItem(item.id, { priority: event.target.value as EditableItem["priority"] })} aria-label="Prioridade"><option value="essencial">Essencial</option><option value="importante">Importante</option><option value="flexivel">Flexível</option></Select> : <div className="hidden sm:block" />}
+                  </div>
+                  <Input value={item.notes} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Observações (opcional)" aria-label="Observações" />
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <CurrencyInput
                       value={(item.amountCents / 100).toFixed(2)}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value)) updateItem(item.id, { amountCents: Math.round(value * 100) });
-                      }}
-                      className="w-28"
+                      onChange={(value) => updateItem(item.id, { amountCents: Math.round((Number(value) || 0) * 100) })}
+                      className="w-32"
                       aria-label="Valor"
                     />
                     <Select
                       value={item.type}
-                      onChange={(event) => updateItem(item.id, { type: event.target.value as "receita" | "despesa" })}
+                      onChange={(event) => {
+                        const nextType = event.target.value as "receita" | "despesa";
+                        updateItem(item.id, { type: nextType, categoryId: defaultCategoryFor(nextType)?.id ?? "", status: nextType === "receita" ? "recebido" : "pago" });
+                      }}
                       className="h-11 flex-1"
                       aria-label="Tipo"
                     >

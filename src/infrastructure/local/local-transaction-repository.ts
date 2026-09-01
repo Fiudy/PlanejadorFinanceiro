@@ -3,17 +3,23 @@ import { Transaction } from "@/domain/entities/transaction";
 import type { TransactionFilters, TransactionRepository } from "@/domain/repositories/repositories";
 import { localStorageClient } from "./local-storage-client";
 
-type TransactionDto = Omit<TransactionProps, "date" | "createdAt"> & { date: string; createdAt: string };
+type TransactionDto = Omit<TransactionProps, "date" | "dueDate" | "plannedDate" | "settledAt" | "createdAt"> & {
+  date: string;
+  dueDate?: string;
+  plannedDate?: string;
+  settledAt?: string;
+  createdAt: string;
+};
 
 const COLLECTION = "transactions";
 
 function toDto(transaction: Transaction): TransactionDto {
   const props = transaction.toProps();
-  return { ...props, date: props.date.toISOString(), createdAt: props.createdAt.toISOString() };
+  return { ...props, date: props.date.toISOString(), dueDate: props.dueDate?.toISOString(), plannedDate: props.plannedDate?.toISOString(), settledAt: props.settledAt?.toISOString(), createdAt: props.createdAt.toISOString() };
 }
 
 function toDomain(dto: TransactionDto): Transaction {
-  return Transaction.fromProps({ ...dto, date: new Date(dto.date), createdAt: new Date(dto.createdAt) });
+  return Transaction.fromProps({ ...dto, date: new Date(dto.date), dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, plannedDate: dto.plannedDate ? new Date(dto.plannedDate) : undefined, settledAt: dto.settledAt ? new Date(dto.settledAt) : undefined, createdAt: new Date(dto.createdAt) });
 }
 
 export class LocalTransactionRepository implements TransactionRepository {

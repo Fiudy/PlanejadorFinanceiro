@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Dialog } from "@/shared/ui/dialog";
 import { Field, Input } from "@/shared/ui/input";
+import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Select } from "@/shared/ui/select";
 import { Button } from "@/shared/ui/button";
 import { BankPicker } from "@/shared/ui/bank-picker";
@@ -56,6 +57,7 @@ export function AccountFormDialog({
   const updateAccount = useUpdateAccount();
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -116,7 +118,7 @@ export function AccountFormDialog({
           </Select>
         </Field>
         <Field label="Saldo inicial (R$)" htmlFor="initialBalance">
-          <Input id="initialBalance" type="number" step="0.01" error={errors.initialBalance?.message} {...register("initialBalance")} />
+          <Controller control={control} name="initialBalance" render={({ field }) => <CurrencyInput id="initialBalance" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.initialBalance?.message} />} />
         </Field>
         <Button type="submit" size="lg" disabled={isSubmitting} className="mt-2 w-full justify-center">
           {isSubmitting ? "Salvando..." : account ? "Salvar alterações" : "Salvar conta"}

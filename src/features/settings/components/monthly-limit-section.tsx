@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Gauge as GaugeIcon } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/shared/ui/card";
-import { Field, Input } from "@/shared/ui/input";
+import { Field } from "@/shared/ui/input";
+import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Button } from "@/shared/ui/button";
 import { Money } from "@/domain/value-objects/money";
 import { useUserPreferences, useSetMonthlyExpenseLimit } from "../hooks/use-user-preferences";
@@ -44,14 +45,7 @@ export function MonthlyLimitSection() {
       <div className="flex items-end gap-2">
         <div className="flex-1">
           <Field label="Limite (R$)" htmlFor="monthlyLimit">
-            <Input
-              id="monthlyLimit"
-              type="number"
-              step="0.01"
-              placeholder="Ex: 4000"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-            />
+            <CurrencyInput id="monthlyLimit" value={value} onChange={setValue} />
           </Field>
         </div>
         <Button onClick={handleSave} disabled={setLimit.isPending} className="h-11">

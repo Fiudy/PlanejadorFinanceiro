@@ -21,6 +21,8 @@ export interface CardProps {
   id: string;
   userId: string;
   name: string;
+  holderName?: string;
+  logoUrl?: string;
   bank: string;
   color: string;
   brand: CardBrand;
@@ -64,6 +66,12 @@ export class Card {
   get bank() {
     return this.props.bank;
   }
+  get holderName() {
+    return this.props.holderName ?? "";
+  }
+  get logoUrl() {
+    return this.props.logoUrl ?? "";
+  }
   get color() {
     return this.props.color;
   }
@@ -83,7 +91,7 @@ export class Card {
     return this.props.archived;
   }
 
-  updateDetails(input: { name: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }): Card {
+  updateDetails(input: { name: string; holderName?: string; logoUrl?: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }): Card {
     return Card.create({ ...this.props, ...input, createdAt: this.props.createdAt });
   }
 

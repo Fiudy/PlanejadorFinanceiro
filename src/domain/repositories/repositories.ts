@@ -89,6 +89,8 @@ export interface AuthService {
   onAuthStateChanged(callback: (identity: AuthenticatedIdentity | null) => void): () => void;
   signUp(name: string, credentials: AuthCredentials): Promise<AuthenticatedIdentity>;
   signIn(credentials: AuthCredentials): Promise<AuthenticatedIdentity>;
+  signInWithGoogle(): Promise<AuthenticatedIdentity>;
+  sendPasswordReset(email: string): Promise<void>;
   signOut(): Promise<void>;
 }
 

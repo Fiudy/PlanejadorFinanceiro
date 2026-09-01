@@ -3,6 +3,11 @@ export interface ParsedStatementItem {
   amountCents: number;
   type: "receita" | "despesa";
   date: string | null;
+  dueDate: string | null;
+  status: "pendente" | "pago" | "recebido";
+  priority: "essencial" | "importante" | "flexivel";
+  categoryName: string | null;
+  notes: string;
 }
 
 export const isGeminiConfigured = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
@@ -12,6 +17,11 @@ interface GeminiResponseItem {
   amount?: unknown;
   type?: unknown;
   date?: unknown;
+  dueDate?: unknown;
+  status?: unknown;
+  priority?: unknown;
+  categoryName?: unknown;
+  notes?: unknown;
 }
 
 const RESPONSE_SCHEMA = {
@@ -26,6 +36,11 @@ const RESPONSE_SCHEMA = {
           amount: { type: "number" },
           type: { type: "string", enum: ["receita", "despesa"] },
           date: { type: "string", nullable: true },
+          dueDate: { type: "string", nullable: true },
+          status: { type: "string", enum: ["pendente", "pago", "recebido"] },
+          priority: { type: "string", enum: ["essencial", "importante", "flexivel"] },
+          categoryName: { type: "string", nullable: true },
+          notes: { type: "string" },
         },
         required: ["description", "amount", "type"],
       },
@@ -40,6 +55,11 @@ Extraia CADA lançamento (linha) do documento anexado. Para cada um, retorne:
 - amount: o valor em reais (número positivo, use ponto como separador decimal).
 - type: "despesa" para compras, cobranças, tarifas, saques e débitos; "receita" para depósitos, transferências recebidas, salário, estornos, créditos e reembolsos.
 - date: a data do lançamento no formato AAAA-MM-DD, se existir no documento; caso contrário, null.
+- dueDate: vencimento/recebimento no formato AAAA-MM-DD quando estiver explícito; senão use date.
+- status: use "pago" para despesas já efetivadas, "recebido" para receitas já efetivadas e "pendente" apenas para valores futuros.
+- priority: classifique despesas como "essencial", "importante" ou "flexivel"; para receitas use "importante".
+- categoryName: sugira uma categoria curta coerente com a descrição; use null se não houver contexto.
+- notes: detalhes úteis explicitamente presentes na linha; use texto vazio se não houver.
 
 Ignore linhas que sejam apenas totais, subtotais, cabeçalhos, saldo anterior/atual ou informações que não sejam um lançamento individual.
 Responda estritamente no formato JSON definido pelo schema.`;
@@ -53,18 +73,25 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** Chama a API do Gemini direto do navegador (sem backend) e retorna o texto bruto da resposta. */
-async function callGemini(body: Record<string, unknown>): Promise<string> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Chave do Gemini não configurada (VITE_GEMINI_API_KEY).");
+/** Mensagem amigável exibida ao usuário quando a IA está temporariamente indisponível — nunca expor o erro técnico do Gemini. */
+export const GEMINI_UNAVAILABLE_MESSAGE =
+  "A inteligência artificial está temporariamente indisponível devido à alta demanda. Tente novamente em alguns instantes.";
 
-  // Alias flutuante mantido pelo Google — evita quebrar quando uma versão específica
-  // (ex: gemini-2.5-flash) é descontinuada para chaves novas.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
 
-  let response: Response;
+/** HTTP status considerados indisponibilidade temporária (alta demanda, rate limit, sobrecarga) — vale a pena tentar de novo. */
+function isRetryableStatus(status: number): boolean {
+  return status === 503 || status === 429 || status === 500 || status === 502 || status === 504;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchGemini(url: string, body: Record<string, unknown>): Promise<Response> {
   try {
-    response = await fetch(url, {
+    return await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -73,6 +100,28 @@ async function callGemini(body: Record<string, unknown>): Promise<string> {
     console.error("Falha de rede ao chamar a API do Gemini", error);
     throw new Error("Não foi possível contatar a API do Gemini. Verifique sua conexão e tente novamente.", { cause: error });
   }
+}
+
+/** Chama a API do Gemini direto do navegador (sem backend) e retorna o texto bruto da resposta.
+ * Erros temporários (503/429/5xx) acionam retry automático com backoff exponencial (1s, 2s, 4s)
+ * antes de desistir e lançar uma mensagem amigável — o erro técnico do Gemini nunca chega à UI. */
+async function callGemini(body: Record<string, unknown>): Promise<string> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Chave do Gemini não configurada (VITE_GEMINI_API_KEY).");
+
+  // Alias flutuante mantido pelo Google — evita quebrar quando uma versão específica
+  // (ex: gemini-2.5-flash) é descontinuada para chaves novas.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+
+  let response: Response | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    response = await fetchGemini(url, body);
+    if (response.ok || !isRetryableStatus(response.status) || attempt === MAX_RETRIES) break;
+    console.warn(`Gemini indisponível (status ${response.status}), tentativa ${attempt + 1}/${MAX_RETRIES + 1}...`);
+    await sleep(BASE_RETRY_DELAY_MS * 2 ** attempt);
+  }
+  // response nunca é null aqui: o loop roda ao menos uma vez (attempt=0..MAX_RETRIES).
+  response = response!;
 
   if (!response.ok) {
     let detail = "";
@@ -83,10 +132,11 @@ async function callGemini(body: Record<string, unknown>): Promise<string> {
       /* corpo do erro não veio em JSON — segue sem detalhe extra */
     }
     console.error("Gemini API retornou erro", response.status, detail);
+    if (isRetryableStatus(response.status)) throw new Error(GEMINI_UNAVAILABLE_MESSAGE);
     throw new Error(
       detail
-        ? `Gemini retornou erro ${response.status}: ${detail}`
-        : `Gemini retornou erro ${response.status}. Verifique se a chave é válida e se a "Generative Language API" está habilitada no seu projeto.`,
+        ? `Não foi possível processar sua solicitação com a IA (${detail}).`
+        : `Não foi possível processar sua solicitação com a IA. Verifique se a chave é válida e se a "Generative Language API" está habilitada no seu projeto.`,
     );
   }
 
@@ -128,9 +178,14 @@ export async function parseStatementPdf(file: File): Promise<ParsedStatementItem
       const amount = typeof item.amount === "number" ? item.amount : Number(item.amount);
       const type = item.type === "receita" ? "receita" : item.type === "despesa" ? "despesa" : null;
       const date = typeof item.date === "string" && item.date.length > 0 ? item.date : null;
+      const dueDate = typeof item.dueDate === "string" && item.dueDate.length > 0 ? item.dueDate : date;
+      const status = item.status === "pago" || item.status === "recebido" ? item.status : "pendente";
+      const priority = item.priority === "essencial" || item.priority === "flexivel" ? item.priority : "importante";
+      const categoryName = typeof item.categoryName === "string" && item.categoryName.trim() ? item.categoryName.trim() : null;
+      const notes = typeof item.notes === "string" ? item.notes.trim() : "";
 
       if (!description || !Number.isFinite(amount) || amount <= 0 || !type) return null;
-      return { description, amountCents: Math.round(amount * 100), type, date };
+      return { description, amountCents: Math.round(amount * 100), type, date, dueDate, status, priority, categoryName, notes };
     })
     .filter((item): item is ParsedStatementItem => item !== null);
 }

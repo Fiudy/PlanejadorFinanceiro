@@ -8,6 +8,8 @@ interface AuthContextValue {
   user: AuthenticatedIdentity | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -41,6 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signIn: async (email, password) => {
       await container.authService.signIn({ email, password });
+    },
+    signInWithGoogle: async () => {
+      await container.authService.signInWithGoogle();
+    },
+    sendPasswordReset: async (email) => {
+      await container.authService.sendPasswordReset(email);
     },
     signUp: async (name, email, password) => {
       await container.authService.signUp(name, { email, password });

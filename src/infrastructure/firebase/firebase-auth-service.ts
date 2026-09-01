@@ -1,7 +1,10 @@
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
 } from "firebase/auth";
@@ -13,6 +16,11 @@ import type {
 import { getFirebaseAuth } from "./firebase-config";
 
 export class FirebaseAuthService implements AuthService {
+  private identity(user: { uid: string; displayName: string | null; email: string | null }): AuthenticatedIdentity {
+    if (!user.email) throw new Error("A conta autenticada não possui um e-mail disponível.");
+    return { id: user.uid, name: user.displayName ?? "", email: user.email };
+  }
+
   getCurrentUser(): AuthenticatedIdentity | null {
     const user = getFirebaseAuth().currentUser;
     if (!user || !user.email) return null;
@@ -37,13 +45,40 @@ export class FirebaseAuthService implements AuthService {
   }
 
   async signIn(credentials: AuthCredentials): Promise<AuthenticatedIdentity> {
-    const auth = getFirebaseAuth();
-    const result = await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
-    return {
-      id: result.user.uid,
-      name: result.user.displayName ?? "",
-      email: credentials.email,
-    };
+    try {
+      const result = await signInWithEmailAndPassword(getFirebaseAuth(), credentials.email, credentials.password);
+      return this.identity(result.user);
+    } catch (error) {
+      const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+      if (["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(code)) {
+        throw new Error("E-mail ou senha inválidos. Se sua conta veio do Organiza Contas, redefina a senha ou entre com o Google.", { cause: error });
+      }
+      if (code === "auth/too-many-requests") {
+        throw new Error("Muitas tentativas de acesso. Aguarde alguns minutos ou redefina sua senha.", { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  async signInWithGoogle(): Promise<AuthenticatedIdentity> {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(getFirebaseAuth(), provider);
+      return this.identity(result.user);
+    } catch (error) {
+      const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+      if (code === "auth/popup-closed-by-user") throw new Error("A entrada com Google foi cancelada.", { cause: error });
+      if (code === "auth/popup-blocked") throw new Error("O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.", { cause: error });
+      if (code === "auth/account-exists-with-different-credential") {
+        throw new Error("Este e-mail já usa outra forma de acesso. Entre por e-mail e senha ou redefina a senha.", { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  async sendPasswordReset(email: string): Promise<void> {
+    await sendPasswordResetEmail(getFirebaseAuth(), email);
   }
 
   async signOut(): Promise<void> {

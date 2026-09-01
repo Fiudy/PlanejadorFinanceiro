@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, Pencil, ArrowUpRight, ArrowDownRight, Repeat } from "lucide-react";
+import { Trash2, Pencil, ArrowUpRight, ArrowDownRight, Repeat, CalendarClock } from "lucide-react";
 import type { Transaction } from "@/domain/entities/transaction";
 import type { Category } from "@/domain/entities/category";
 import type { Account } from "@/domain/entities/account";
@@ -54,9 +54,11 @@ export function TransactionList({
         const account = accountById.get(transaction.accountId);
         const isIncome = transaction.type === "receita";
         const isFixed = transaction.description.endsWith(RECURRING_BILL_TRANSACTION_SUFFIX);
+        const statusLabel = transaction.status === "pendente" ? "Pendente" : transaction.status === "recebido" ? "Recebido" : "Pago";
+        const priorityLabel = transaction.priority === "essencial" ? "Essencial" : transaction.priority === "flexivel" ? "Flexível" : "Importante";
 
         return (
-          <li key={transaction.id} className="flex items-center gap-3 py-3">
+          <li key={transaction.id} className="flex items-center gap-3 py-3.5">
             <div
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
               style={{ backgroundColor: `${category?.color ?? "#64748B"}1A`, color: category?.color ?? "#64748B" }}
@@ -74,8 +76,9 @@ export function TransactionList({
                 )}
               </p>
               <p className="truncate text-xs text-muted-500">
-                {category?.name ?? "Sem categoria"} · {account?.name ?? "Conta removida"} · {formatDate(transaction.date)}
+                {category?.name ?? "Sem categoria"} · {account?.name ?? "Conta removida"}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-500"><span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" />{formatDate(transaction.dueDate)}</span><Badge tone={transaction.status === "pendente" ? "muted" : "accent"} className="py-0">{statusLabel}</Badge>{!isIncome ? <Badge tone="neutral" className="py-0">{priorityLabel}</Badge> : null}</div>
             </div>
             <span className={`tabular shrink-0 text-sm font-semibold ${isIncome ? "text-accent-500" : "text-coral-500"}`}>
               {isIncome ? "+" : "-"} {transaction.amount.format()}

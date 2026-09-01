@@ -19,6 +19,8 @@ export function useCreateCard() {
   return useMutation({
     mutationFn: (input: {
       name: string;
+      holderName?: string;
+      logoUrl?: string;
       bank: string;
       color: string;
       brand: CardBrand;
@@ -36,7 +38,7 @@ export function useUpdateCard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ cardId, ...input }: { cardId: string; name: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }) => container.cards.update(cardId, input),
+    mutationFn: ({ cardId, ...input }: { cardId: string; name: string; holderName?: string; logoUrl?: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }) => container.cards.update(cardId, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["cards", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["card-available-limit"] });

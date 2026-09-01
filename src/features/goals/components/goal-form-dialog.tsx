@@ -1,8 +1,9 @@
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Dialog } from "@/shared/ui/dialog";
 import { Field, Input } from "@/shared/ui/input";
+import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Select } from "@/shared/ui/select";
 import { Button } from "@/shared/ui/button";
 import { useCreateGoal } from "../hooks/use-goals";
@@ -25,6 +26,7 @@ export function GoalFormDialog({ open, onClose }: { open: boolean; onClose: () =
   const createGoal = useCreateGoal();
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema), defaultValues: { kind: "reserva" } });
@@ -59,7 +61,7 @@ export function GoalFormDialog({ open, onClose }: { open: boolean; onClose: () =
         </Field>
 
         <Field label="Valor alvo (R$)" htmlFor="targetAmount">
-          <Input id="targetAmount" type="number" step="0.01" error={errors.targetAmount?.message} {...register("targetAmount")} />
+          <Controller control={control} name="targetAmount" render={({ field }) => <CurrencyInput id="targetAmount" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.targetAmount?.message} />} />
         </Field>
 
         <Field label="Data alvo (opcional)" htmlFor="targetDate">

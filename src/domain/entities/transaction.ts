@@ -1,6 +1,8 @@
 import { Money } from "../value-objects/money";
 
 export type TransactionType = "receita" | "despesa";
+export type TransactionStatus = "pendente" | "pago" | "recebido";
+export type TransactionPriority = "essencial" | "importante" | "flexivel";
 
 export interface TransactionProps {
   id: string;
@@ -11,6 +13,13 @@ export interface TransactionProps {
   amountCents: number;
   description: string;
   date: Date;
+  dueDate?: Date;
+  plannedDate?: Date;
+  settledAt?: Date;
+  status?: TransactionStatus;
+  priority?: TransactionPriority;
+  cardId?: string;
+  notes?: string;
   cardPurchaseId?: string;
   createdAt: Date;
 }
@@ -58,6 +67,27 @@ export class Transaction {
   get date() {
     return this.props.date;
   }
+  get dueDate() {
+    return this.props.dueDate ?? this.props.date;
+  }
+  get plannedDate() {
+    return this.props.plannedDate ?? this.props.date;
+  }
+  get settledAt() {
+    return this.props.settledAt;
+  }
+  get status(): TransactionStatus {
+    return this.props.status ?? "pendente";
+  }
+  get priority(): TransactionPriority | undefined {
+    return this.type === "despesa" ? (this.props.priority ?? "importante") : undefined;
+  }
+  get cardId() {
+    return this.props.cardId;
+  }
+  get notes() {
+    return this.props.notes ?? "";
+  }
   get cardPurchaseId() {
     return this.props.cardPurchaseId;
   }
@@ -74,6 +104,13 @@ export class Transaction {
     amountCents: number;
     description: string;
     date: Date;
+    dueDate?: Date;
+    plannedDate?: Date;
+    settledAt?: Date;
+    status?: TransactionStatus;
+    priority?: TransactionPriority;
+    cardId?: string;
+    notes?: string;
   }): Transaction {
     if (props.amountCents <= 0) {
       throw new Error("O valor da transação deve ser maior que zero.");

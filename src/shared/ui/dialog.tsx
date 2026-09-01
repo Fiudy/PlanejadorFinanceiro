@@ -1,9 +1,7 @@
 import type { ReactNode} from "react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
-import { Button } from "./button";
 
 export function Dialog({
   open,
@@ -34,9 +32,9 @@ export function Dialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="oc-app oc-modal-backdrop">
       <div
-        className="absolute inset-0 bg-ink-950/50 backdrop-blur-sm"
+        className="absolute inset-0"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -45,16 +43,13 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "glass relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-[1.5rem] p-6 shadow-xl sm:max-w-md sm:rounded-[1.25rem]",
+          "oc-modal z-10",
           className,
         )}
       >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-ink-950 dark:text-paper-50">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fechar">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        <button className="oc-modal-close" onClick={onClose} aria-label="Fechar">×</button>
+        <span className="oc-eyebrow">{title.toLocaleUpperCase("pt-BR")}</span>
+        <h2>{title}</h2>
         {children}
       </div>
     </div>,

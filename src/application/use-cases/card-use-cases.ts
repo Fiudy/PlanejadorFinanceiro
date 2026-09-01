@@ -23,6 +23,8 @@ export class CardUseCases {
   async create(input: {
     userId: string;
     name: string;
+    holderName?: string;
+    logoUrl?: string;
     bank: string;
     color: string;
     brand: CardBrand;
@@ -41,7 +43,7 @@ export class CardUseCases {
     await this.cards.save(card.archive());
   }
 
-  async update(cardId: string, input: { name: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }) {
+  async update(cardId: string, input: { name: string; holderName?: string; logoUrl?: string; bank: string; color: string; brand: CardBrand; limitCents: number; closingDay: number; dueDay: number }) {
     const card = await this.cards.findById(cardId);
     if (!card) throw new Error("Cartão não encontrado.");
     const updated = card.updateDetails(input);

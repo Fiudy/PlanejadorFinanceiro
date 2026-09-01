@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Dialog } from "@/shared/ui/dialog";
 import { Field, Input } from "@/shared/ui/input";
+import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Select } from "@/shared/ui/select";
 import { Button } from "@/shared/ui/button";
 import { useCategories } from "@/features/settings/hooks/use-categories";
@@ -83,7 +84,7 @@ export function RecurringBillFormDialog({ open, onClose }: { open: boolean; onCl
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Valor (R$)" htmlFor="amount">
-            <Input id="amount" type="number" step="0.01" error={errors.amount?.message} {...register("amount")} />
+            <Controller control={control} name="amount" render={({ field }) => <CurrencyInput id="amount" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.amount?.message} />} />
           </Field>
           <Field label="Recorrência" htmlFor="period">
             <Select id="period" {...register("period")}>

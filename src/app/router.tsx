@@ -12,6 +12,8 @@ import { SettingsPage } from "@/features/settings/components/settings-page";
 import { RecurringBillsPage } from "@/features/recurring-bills/components/recurring-bills-page";
 import { AccountsPage } from "@/features/accounts/components/accounts-page";
 import { AssistantChatPage } from "@/features/assistant/components/assistant-chat-page";
+import { PlanningPage } from "@/features/planning/components/planning-page";
+import { AgendaPage } from "@/features/agenda/components/agenda-page";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +31,8 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { path: "/painel", element: <DashboardPage /> },
+          { path: "/planejamento", element: <PlanningPage /> },
+          { path: "/agenda", element: <AgendaPage /> },
           { path: "/transacoes", element: <TransactionsPage /> },
           { path: "/cartoes", element: <CardsPage /> },
           { path: "/metas", element: <GoalsPage /> },
