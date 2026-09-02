@@ -29,6 +29,33 @@ function itemMonth(item: ParsedStatementItem): string {
   return new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
 
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Primeira fatura cujo fechamento ainda comporta a compra. Funciona tanto
+ * para cartões que vencem depois do fechamento quanto para ciclos que fecham
+ * no mês anterior ao vencimento (ex.: fecha dia 25 e vence dia 5). */
+function invoiceDueDate(purchaseDateKey: string | null, closingDay: number, dueDay: number): string | null {
+  if (!purchaseDateKey) return null;
+  const purchase = new Date(`${purchaseDateKey}T12:00:00`);
+  if (Number.isNaN(purchase.getTime())) return null;
+  let dueMonth = new Date(purchase.getFullYear(), purchase.getMonth(), 1, 12);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const closingMonthOffset = dueDay > closingDay ? 0 : -1;
+    const closing = new Date(dueMonth.getFullYear(), dueMonth.getMonth() + closingMonthOffset, closingDay, 12);
+    if (purchase <= closing) {
+      const due = new Date(dueMonth.getFullYear(), dueMonth.getMonth(), dueDay, 12);
+      return toDateKey(due);
+    }
+    dueMonth = new Date(dueMonth.getFullYear(), dueMonth.getMonth() + 1, 1, 12);
+  }
+  return null;
+}
+
 export function ImportStatementDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
@@ -70,7 +97,8 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
       setItems(parsed.map((item) => {
         const suggested = categories.find((category) => category.kind === item.type && item.categoryName && category.name.toLowerCase() === item.categoryName.toLowerCase());
         const suggestedCard = cards.find((card) => item.cardName && card.name.toLowerCase() === item.cardName.toLowerCase());
-        return { ...item, id: randomId(), categoryId: suggested?.id ?? defaultCategoryFor(item.type)?.id ?? "", cardId: suggestedCard?.id ?? "" };
+        const calculatedDueDate = suggestedCard && item.type === "despesa" ? invoiceDueDate(item.date, suggestedCard.closingDay, suggestedCard.dueDay) : null;
+        return { ...item, dueDate: calculatedDueDate ?? item.dueDate, plannedDate: calculatedDueDate ?? item.plannedDate, id: randomId(), categoryId: suggested?.id ?? defaultCategoryFor(item.type)?.id ?? "", cardId: suggestedCard?.id ?? "" };
       }));
     } catch (err) {
       setError(statementImportErrorMessage(err));
@@ -99,14 +127,15 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
     try {
       for (const item of items) {
         if (!item.categoryId) throw new Error(`Escolha uma categoria para "${item.description}".`);
-        const plannedDate = item.plannedDate ? new Date(`${item.plannedDate}T12:00:00`) : item.date ? new Date(`${item.date}T12:00:00`) : new Date();
+        const purchaseDate = item.date ? new Date(`${item.date}T12:00:00`) : new Date();
+        const plannedDate = item.plannedDate ? new Date(`${item.plannedDate}T12:00:00`) : item.dueDate ? new Date(`${item.dueDate}T12:00:00`) : purchaseDate;
         await createTransaction.mutateAsync({
           accountId,
           categoryId: item.categoryId,
           type: item.type,
           amountCents: item.amountCents,
           description: item.description,
-          date: plannedDate,
+          date: purchaseDate,
           plannedDate,
           dueDate: item.dueDate ? new Date(`${item.dueDate}T12:00:00`) : plannedDate,
           settledAt: item.status === "pendente" ? undefined : plannedDate,
@@ -187,7 +216,12 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
                     <label className="text-[11px] text-muted-500">Vencimento/recebimento<Input type="date" value={item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { dueDate: event.target.value || null })} aria-label="Vencimento ou recebimento" /></label>
                     <label className="text-[11px] text-muted-500">Data planejada<Input type="date" value={item.plannedDate ?? item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { plannedDate: event.target.value || null })} aria-label="Data planejada" /></label>
                     {item.type === "despesa" ? <Select value={item.priority} onChange={(event) => updateItem(item.id, { priority: event.target.value as EditableItem["priority"] })} aria-label="Prioridade"><option value="essencial">Essencial</option><option value="importante">Importante</option><option value="flexivel">Flexível</option></Select> : <div className="hidden sm:block" />}
-                    <Select value={item.cardId} onChange={(event) => updateItem(item.id, { cardId: event.target.value })} aria-label="Cartão"><option value="">Nenhum cartão</option>{cards.filter((card) => !card.archived).map((card) => <option key={card.id} value={card.id}>{card.name}</option>)}</Select>
+                    <label className="text-[11px] text-muted-500">Cartão da fatura<Select value={item.cardId} onChange={(event) => {
+                      const cardId = event.target.value;
+                      const card = cards.find((candidate) => candidate.id === cardId);
+                      const calculatedDueDate = card && item.type === "despesa" ? invoiceDueDate(item.date, card.closingDay, card.dueDay) : null;
+                      updateItem(item.id, { cardId, ...(calculatedDueDate ? { dueDate: calculatedDueDate, plannedDate: calculatedDueDate } : {}) });
+                    }} aria-label="Cartão"><option value="">Nenhum cartão</option>{cards.filter((card) => !card.archived).map((card) => <option key={card.id} value={card.id}>{card.name} · fecha {card.closingDay} · vence {card.dueDay}</option>)}</Select></label>
                   </div>
                   <Input value={item.notes} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Observações (opcional)" aria-label="Observações" />
                   <div className="flex items-center gap-2">
