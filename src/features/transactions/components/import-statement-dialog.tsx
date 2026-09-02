@@ -10,6 +10,7 @@ import { AccountSelect } from "@/features/accounts/components/account-select";
 import { CategorySelect } from "@/features/settings/components/category-select";
 import { useAccounts } from "@/features/accounts/hooks/use-accounts";
 import { useCategories } from "@/features/settings/hooks/use-categories";
+import { useCards } from "@/features/cards/hooks/use-cards";
 import { useCreateTransaction } from "../hooks/use-transactions";
 import { Money } from "@/domain/value-objects/money";
 import { randomId } from "@/shared/lib/id";
@@ -19,11 +20,13 @@ import type { ParsedStatementItem } from "@/shared/lib/gemini";
 interface EditableItem extends ParsedStatementItem {
   id: string;
   categoryId: string;
+  cardId: string;
 }
 
 export function ImportStatementDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: cards = [] } = useCards();
   const parseStatement = useParseStatement();
   const createTransaction = useCreateTransaction();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,7 +60,8 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
       }
       setItems(parsed.map((item) => {
         const suggested = categories.find((category) => category.kind === item.type && item.categoryName && category.name.toLowerCase() === item.categoryName.toLowerCase());
-        return { ...item, id: randomId(), categoryId: suggested?.id ?? defaultCategoryFor(item.type)?.id ?? "" };
+        const suggestedCard = cards.find((card) => item.cardName && card.name.toLowerCase() === item.cardName.toLowerCase());
+        return { ...item, id: randomId(), categoryId: suggested?.id ?? defaultCategoryFor(item.type)?.id ?? "", cardId: suggestedCard?.id ?? "" };
       }));
     } catch (err) {
       setError(statementImportErrorMessage(err));
@@ -86,7 +90,7 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
     try {
       for (const item of items) {
         if (!item.categoryId) throw new Error(`Escolha uma categoria para "${item.description}".`);
-        const plannedDate = item.date ? new Date(`${item.date}T12:00:00`) : new Date();
+        const plannedDate = item.plannedDate ? new Date(`${item.plannedDate}T12:00:00`) : item.date ? new Date(`${item.date}T12:00:00`) : new Date();
         await createTransaction.mutateAsync({
           accountId,
           categoryId: item.categoryId,
@@ -99,6 +103,7 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
           settledAt: item.status === "pendente" ? undefined : plannedDate,
           status: item.type === "receita" && item.status === "pago" ? "recebido" : item.type === "despesa" && item.status === "recebido" ? "pago" : item.status,
           priority: item.type === "despesa" ? item.priority : undefined,
+          cardId: item.cardId || undefined,
           notes: item.notes || undefined,
         });
       }
@@ -110,24 +115,23 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Importar extrato em PDF" className="sm:max-w-3xl">
+    <Dialog open={open} onClose={handleClose} title="Importar fatura ou extrato">
       {!items && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-500">
-            Envie o PDF do extrato consolidado da sua conta. Uma IA lê o arquivo e identifica cada lançamento como
-            receita ou despesa automaticamente — depois é só revisar e confirmar.
+            Envie uma fatura ou extrato em PDF ou CSV. O Gemini identifica os lançamentos e preenche os campos para revisão antes da importação.
           </p>
           {parseStatement.isPending ? (
             <PageSpinner />
           ) : (
             <label className="flex cursor-pointer flex-col items-center gap-2 rounded-[var(--radius-control)] border-2 border-dashed border-border-light px-4 py-8 text-center transition-colors hover:border-accent-500 dark:border-border-dark">
               <Upload className="h-6 w-6 text-muted-500" />
-              <span className="text-sm font-medium text-ink-950 dark:text-paper-50">Selecionar PDF do extrato</span>
-              <span className="text-xs text-muted-500">Apenas arquivos .pdf</span>
+              <span className="text-sm font-medium text-ink-950 dark:text-paper-50">Selecionar PDF ou CSV</span>
+              <span className="text-xs text-muted-500">Arquivos .pdf e .csv</span>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf"
+                accept="application/pdf,text/csv,.csv"
                 className="hidden"
                 onChange={(event) => void handleFileChange(event)}
               />
@@ -166,7 +170,9 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
                       <option value={item.type === "receita" ? "recebido" : "pago"}>{item.type === "receita" ? "Recebido" : "Pago"}</option>
                     </Select>
                     <Input type="date" value={item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { dueDate: event.target.value || null })} aria-label="Vencimento ou recebimento" />
+                    <Input type="date" value={item.plannedDate ?? item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { plannedDate: event.target.value || null })} aria-label="Data planejada" />
                     {item.type === "despesa" ? <Select value={item.priority} onChange={(event) => updateItem(item.id, { priority: event.target.value as EditableItem["priority"] })} aria-label="Prioridade"><option value="essencial">Essencial</option><option value="importante">Importante</option><option value="flexivel">Flexível</option></Select> : <div className="hidden sm:block" />}
+                    <Select value={item.cardId} onChange={(event) => updateItem(item.id, { cardId: event.target.value })} aria-label="Cartão"><option value="">Nenhum cartão</option>{cards.filter((card) => !card.archived).map((card) => <option key={card.id} value={card.id}>{card.name}</option>)}</Select>
                   </div>
                   <Input value={item.notes} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Observações (opcional)" aria-label="Observações" />
                   <div className="flex items-center gap-2">

@@ -1,10 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { parseStatementPdf } from "@/shared/lib/gemini";
+import { parseStatementFile } from "@/shared/lib/gemini";
 
-/** Lê uma fatura de cartão ou extrato bancário em PDF via Gemini, usado tanto em Cartões quanto em Lançamentos. */
+/** Lê uma fatura ou extrato em PDF/CSV via Gemini, usado tanto em Cartões quanto em Lançamentos. */
 export function useParseStatement() {
   return useMutation({
-    mutationFn: (file: File) => parseStatementPdf(file),
+    mutationFn: (file: File) => parseStatementFile(file),
   });
 }
 

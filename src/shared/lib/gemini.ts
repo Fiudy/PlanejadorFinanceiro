@@ -4,9 +4,11 @@ export interface ParsedStatementItem {
   type: "receita" | "despesa";
   date: string | null;
   dueDate: string | null;
+  plannedDate: string | null;
   status: "pendente" | "pago" | "recebido";
   priority: "essencial" | "importante" | "flexivel";
   categoryName: string | null;
+  cardName: string | null;
   notes: string;
 }
 
@@ -18,9 +20,11 @@ interface GeminiResponseItem {
   type?: unknown;
   date?: unknown;
   dueDate?: unknown;
+  plannedDate?: unknown;
   status?: unknown;
   priority?: unknown;
   categoryName?: unknown;
+  cardName?: unknown;
   notes?: unknown;
 }
 
@@ -37,9 +41,11 @@ const RESPONSE_SCHEMA = {
           type: { type: "string", enum: ["receita", "despesa"] },
           date: { type: "string", nullable: true },
           dueDate: { type: "string", nullable: true },
+          plannedDate: { type: "string", nullable: true },
           status: { type: "string", enum: ["pendente", "pago", "recebido"] },
           priority: { type: "string", enum: ["essencial", "importante", "flexivel"] },
           categoryName: { type: "string", nullable: true },
+          cardName: { type: "string", nullable: true },
           notes: { type: "string" },
         },
         required: ["description", "amount", "type"],
@@ -49,16 +55,18 @@ const RESPONSE_SCHEMA = {
   required: ["items"],
 };
 
-const PROMPT = `Você é um assistente financeiro que lê faturas de cartão de crédito e extratos bancários (consolidados) em PDF.
+const PROMPT = `Você é um assistente financeiro que lê faturas de cartão de crédito e extratos bancários em PDF ou CSV.
 Extraia CADA lançamento (linha) do documento anexado. Para cada um, retorne:
 - description: o nome/descrição EXATAMENTE como aparece no documento, sem inventar nem resumir.
 - amount: o valor em reais (número positivo, use ponto como separador decimal).
 - type: "despesa" para compras, cobranças, tarifas, saques e débitos; "receita" para depósitos, transferências recebidas, salário, estornos, créditos e reembolsos.
 - date: a data do lançamento no formato AAAA-MM-DD, se existir no documento; caso contrário, null.
 - dueDate: vencimento/recebimento no formato AAAA-MM-DD quando estiver explícito; senão use date.
+- plannedDate: data recomendada para pagar/receber no formato AAAA-MM-DD; use dueDate quando não houver outra indicação.
 - status: use "pago" para despesas já efetivadas, "recebido" para receitas já efetivadas e "pendente" apenas para valores futuros.
 - priority: classifique despesas como "essencial", "importante" ou "flexivel"; para receitas use "importante".
 - categoryName: sugira uma categoria curta coerente com a descrição; use null se não houver contexto.
+- cardName: nome do cartão emissor quando o documento identificar a fatura; caso contrário, null.
 - notes: detalhes úteis explicitamente presentes na linha; use texto vazio se não houver.
 
 Ignore linhas que sejam apenas totais, subtotais, cabeçalhos, saldo anterior/atual ou informações que não sejam um lançamento individual.
@@ -160,22 +168,7 @@ async function callGemini(body: Record<string, unknown>): Promise<string> {
 }
 
 /** Lê uma fatura de cartão ou extrato bancário em PDF direto do navegador usando a API do Gemini (sem backend). */
-export async function parseStatementPdf(file: File): Promise<ParsedStatementItem[]> {
-  const fileBase64 = await fileToBase64(file);
-  const rawText = await callGemini({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: PROMPT }, { inline_data: { mime_type: file.type || "application/pdf", data: fileBase64 } }],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0.1,
-    },
-  });
-
+function parseGeminiStatementResponse(rawText: string): ParsedStatementItem[] {
   let parsed: { items?: GeminiResponseItem[] };
   try {
     parsed = JSON.parse(rawText);
@@ -190,16 +183,50 @@ export async function parseStatementPdf(file: File): Promise<ParsedStatementItem
       const type = item.type === "receita" ? "receita" : item.type === "despesa" ? "despesa" : null;
       const date = typeof item.date === "string" && item.date.length > 0 ? item.date : null;
       const dueDate = typeof item.dueDate === "string" && item.dueDate.length > 0 ? item.dueDate : date;
+      const plannedDate = typeof item.plannedDate === "string" && item.plannedDate.length > 0 ? item.plannedDate : dueDate;
       const status = item.status === "pago" || item.status === "recebido" ? item.status : "pendente";
       const priority = item.priority === "essencial" || item.priority === "flexivel" ? item.priority : "importante";
       const categoryName = typeof item.categoryName === "string" && item.categoryName.trim() ? item.categoryName.trim() : null;
+      const cardName = typeof item.cardName === "string" && item.cardName.trim() ? item.cardName.trim() : null;
       const notes = typeof item.notes === "string" ? item.notes.trim() : "";
 
       if (!description || !Number.isFinite(amount) || amount <= 0 || !type) return null;
-      return { description, amountCents: Math.round(amount * 100), type, date, dueDate, status, priority, categoryName, notes };
+      return { description, amountCents: Math.round(amount * 100), type, date, dueDate, plannedDate, status, priority, categoryName, cardName, notes };
     })
     .filter((item): item is ParsedStatementItem => item !== null);
 }
+
+/** Lê uma fatura ou extrato em PDF/CSV direto do navegador usando a API do Gemini. */
+export async function parseStatementFile(file: File): Promise<ParsedStatementItem[]> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension !== "pdf" && extension !== "csv") throw new Error("Selecione um arquivo PDF ou CSV.");
+  const parts: Array<Record<string, unknown>> = [{ text: PROMPT }];
+  if (extension === "csv") {
+    const csv = await file.text();
+    if (!csv.trim()) throw new Error("O arquivo CSV está vazio.");
+    parts.push({ text: `Conteúdo do arquivo CSV:\n\n${csv.slice(0, 1_500_000)}` });
+  } else {
+    const fileBase64 = await fileToBase64(file);
+    parts.push({ inline_data: { mime_type: "application/pdf", data: fileBase64 } });
+  }
+  const rawText = await callGemini({
+    contents: [
+      {
+        role: "user",
+        parts,
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+      temperature: 0.1,
+    },
+  });
+
+  return parseGeminiStatementResponse(rawText);
+}
+
+export const parseStatementPdf = parseStatementFile;
 
 export interface ChatMessage {
   role: "user" | "model";

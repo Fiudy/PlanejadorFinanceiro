@@ -20,7 +20,6 @@ import { Money } from "@/domain/value-objects/money";
 import type { Transaction } from "@/domain/entities/transaction";
 import { addMonths, endOfMonth, isSameDay, monthLabelLong, startOfMonth } from "@/shared/lib/date";
 import { cn } from "@/shared/lib/cn";
-import { isGeminiConfigured } from "@/shared/lib/gemini";
 
 export function TransactionsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -134,17 +133,10 @@ export function TransactionsPage() {
           <p className="text-xs text-muted-500 sm:text-sm">Suas receitas e despesas, mês a mês.</p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {isGeminiConfigured && (
-            <Button
-              onClick={() => setImportOpen(true)}
-              variant="secondary"
-              size="sm"
-              className="sm:h-10 sm:px-4 sm:text-sm"
-            >
-              <FileUp className="h-4 w-4" />
-              Importar extrato
-            </Button>
-          )}
+          <button onClick={() => setImportOpen(true)} className="oc-soft">
+            <FileUp className="h-4 w-4" />
+            Importar fatura ou extrato
+          </button>
           <Button onClick={openCreate} size="sm" className="sm:h-10 sm:px-4 sm:text-sm">
             <Plus className="h-4 w-4" />
             Novo
@@ -301,7 +293,7 @@ export function TransactionsPage() {
       )}
 
       <TransactionFormDialog open={dialogOpen} onClose={closeDialog} transaction={editingTransaction ?? undefined} />
-      {isGeminiConfigured && <ImportStatementDialog open={importOpen} onClose={() => setImportOpen(false)} />}
+      <ImportStatementDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
