@@ -85,8 +85,8 @@ function fileToBase64(file: File): Promise<string> {
 export const GEMINI_UNAVAILABLE_MESSAGE =
   "A inteligência artificial está temporariamente indisponível devido à alta demanda. Tente novamente em alguns instantes.";
 
-const MAX_RETRIES = 3;
-const BASE_RETRY_DELAY_MS = 1000;
+const MAX_RETRIES = 1;
+const BASE_RETRY_DELAY_MS = 500;
 
 /** HTTP status considerados indisponibilidade temporária (alta demanda, rate limit, sobrecarga) — vale a pena tentar de novo. */
 function isRetryableStatus(status: number): boolean {
@@ -115,7 +115,7 @@ async function fetchGemini(url: string, body: Record<string, unknown>): Promise<
 // enquanto "gemini-3.6-flash" (nome fixo do modelo atual) responde normalmente — por isso ele
 // vem primeiro. Mantemos o alias como segunda tentativa: se um dia for o fixo que ficar
 // sobrecarregado, ainda tentamos o alias antes de desistir, sem precisar alterar código.
-const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-flash-latest"];
+const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
 
 /** Chama a API do Gemini direto do navegador (sem backend) e retorna o texto bruto da resposta.
  * Para cada modelo em GEMINI_MODELS, erros temporários (503/429/5xx) acionam retry automático
@@ -196,6 +196,64 @@ function parseGeminiStatementResponse(rawText: string): ParsedStatementItem[] {
     .filter((item): item is ParsedStatementItem => item !== null);
 }
 
+function normalizeCsvHeader(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const values: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"' && line[index + 1] === '"' && quoted) { value += '"'; index += 1; }
+    else if (character === '"') quoted = !quoted;
+    else if (character === delimiter && !quoted) { values.push(value.trim()); value = ""; }
+    else value += character;
+  }
+  values.push(value.trim());
+  return values;
+}
+
+function csvDate(value: string): string | null {
+  const clean = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+  const match = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (!match) return null;
+  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+  return `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+}
+
+function csvAmount(value: string): number {
+  const clean = value.replace(/R\$/gi, "").replace(/\s/g, "");
+  const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
+  return Number(normalized.replace(/[^\d.-]/g, ""));
+}
+
+function parseCsvLocally(csv: string): ParsedStatementItem[] {
+  const lines = csv.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return [];
+  const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+  const headers = splitCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+  const find = (...names: string[]) => headers.findIndex((header) => names.some((name) => header === name || header.includes(name)));
+  const descriptionIndex = find("descricao", "historico", "estabelecimento", "lancamento", "memo");
+  const amountIndex = find("valor", "amount");
+  const dateIndex = find("data", "date");
+  const typeIndex = find("tipo", "natureza");
+  const categoryIndex = find("categoria", "category");
+  if (descriptionIndex < 0 || amountIndex < 0) return [];
+  return lines.slice(1).map((line): ParsedStatementItem | null => {
+    const row = splitCsvLine(line, delimiter);
+    const description = row[descriptionIndex]?.trim() ?? "";
+    const signedAmount = csvAmount(row[amountIndex] ?? "");
+    if (!description || !Number.isFinite(signedAmount) || signedAmount === 0) return null;
+    const rawType = normalizeCsvHeader(row[typeIndex] ?? "");
+    const type = signedAmount < 0 || /despesa|debito|saida/.test(rawType) ? "despesa" : "receita";
+    const date = dateIndex >= 0 ? csvDate(row[dateIndex] ?? "") : null;
+    return { description, amountCents: Math.round(Math.abs(signedAmount) * 100), type, date, dueDate: date, plannedDate: date, status: type === "receita" ? "recebido" : "pago", priority: "importante", categoryName: categoryIndex >= 0 ? row[categoryIndex]?.trim() || null : null, cardName: null, notes: "Importado de CSV" };
+  }).filter((item): item is ParsedStatementItem => item !== null);
+}
+
 /** Lê uma fatura ou extrato em PDF/CSV direto do navegador usando a API do Gemini. */
 export async function parseStatementFile(file: File): Promise<ParsedStatementItem[]> {
   const extension = file.name.split(".").pop()?.toLowerCase();
@@ -204,6 +262,8 @@ export async function parseStatementFile(file: File): Promise<ParsedStatementIte
   if (extension === "csv") {
     const csv = await file.text();
     if (!csv.trim()) throw new Error("O arquivo CSV está vazio.");
+    const localItems = parseCsvLocally(csv);
+    if (localItems.length > 0) return localItems;
     parts.push({ text: `Conteúdo do arquivo CSV:\n\n${csv.slice(0, 1_500_000)}` });
   } else {
     const fileBase64 = await fileToBase64(file);

@@ -23,6 +23,12 @@ interface EditableItem extends ParsedStatementItem {
   cardId: string;
 }
 
+function itemMonth(item: ParsedStatementItem): string {
+  const value = item.plannedDate ?? item.dueDate ?? item.date;
+  if (!value) return "Mês não identificado";
+  return new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
 export function ImportStatementDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
@@ -149,10 +155,12 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
 
           <div className="flex flex-col gap-2">
             <Label>{items.length} lançamento(s) encontrado(s)</Label>
+            <p className="text-xs text-muted-500">Períodos identificados: {[...new Set(items.map(itemMonth))].join(" · ")}</p>
             <ul className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto pr-1">
               {items.map((item) => (
                 <li key={item.id} className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm dark:border-border-dark dark:bg-ink-900">
                   <div className="flex items-center gap-2">
+                    <span className="oc-soft !min-h-7 shrink-0 !px-2 text-[10px] capitalize">{itemMonth(item)}</span>
                     <Input
                       value={item.description}
                       onChange={(event) => updateItem(item.id, { description: event.target.value })}
@@ -169,8 +177,8 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
                       <option value="pendente">Pendente</option>
                       <option value={item.type === "receita" ? "recebido" : "pago"}>{item.type === "receita" ? "Recebido" : "Pago"}</option>
                     </Select>
-                    <Input type="date" value={item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { dueDate: event.target.value || null })} aria-label="Vencimento ou recebimento" />
-                    <Input type="date" value={item.plannedDate ?? item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { plannedDate: event.target.value || null })} aria-label="Data planejada" />
+                    <label className="text-[11px] text-muted-500">Vencimento/recebimento<Input type="date" value={item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { dueDate: event.target.value || null })} aria-label="Vencimento ou recebimento" /></label>
+                    <label className="text-[11px] text-muted-500">Data planejada<Input type="date" value={item.plannedDate ?? item.dueDate ?? item.date ?? ""} onChange={(event) => updateItem(item.id, { plannedDate: event.target.value || null })} aria-label="Data planejada" /></label>
                     {item.type === "despesa" ? <Select value={item.priority} onChange={(event) => updateItem(item.id, { priority: event.target.value as EditableItem["priority"] })} aria-label="Prioridade"><option value="essencial">Essencial</option><option value="importante">Importante</option><option value="flexivel">Flexível</option></Select> : <div className="hidden sm:block" />}
                     <Select value={item.cardId} onChange={(event) => updateItem(item.id, { cardId: event.target.value })} aria-label="Cartão"><option value="">Nenhum cartão</option>{cards.filter((card) => !card.archived).map((card) => <option key={card.id} value={card.id}>{card.name}</option>)}</Select>
                   </div>
