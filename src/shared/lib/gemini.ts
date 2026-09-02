@@ -70,6 +70,9 @@ Extraia CADA lançamento (linha) do documento anexado. Para cada um, retorne:
 - notes: detalhes úteis explicitamente presentes na linha; use texto vazio se não houver.
 
 Ignore linhas que sejam apenas totais, subtotais, cabeçalhos, saldo anterior/atual ou informações que não sejam um lançamento individual.
+Não agrupe lançamentos semelhantes e não omita linhas repetidas: duas linhas iguais em datas iguais continuam sendo dois lançamentos.
+Em faturas, inclua compras nacionais, internacionais, parcelas, tarifas, juros, pagamentos, estornos e créditos, preservando uma saída por linha do documento.
+Antes de responder, percorra todas as páginas e confira internamente se cada linha monetária individual foi representada exatamente uma vez.
 Responda estritamente no formato JSON definido pelo schema.`;
 
 function fileToBase64(file: File): Promise<string> {
@@ -216,7 +219,7 @@ function splitCsvLine(line: string, delimiter: string): string[] {
 }
 
 function csvDate(value: string): string | null {
-  const clean = value.trim();
+  const clean = value.trim().split(/[ T]/)[0];
   if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
   const match = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (!match) return null;
@@ -225,30 +228,45 @@ function csvDate(value: string): string | null {
 }
 
 function csvAmount(value: string): number {
-  const clean = value.replace(/R\$/gi, "").replace(/\s/g, "");
+  const raw = value.trim();
+  const negative = /^\(.*\)$/.test(raw) || /-$/.test(raw) || /^-/.test(raw);
+  const clean = raw.replace(/R\$/gi, "").replace(/[()\s]/g, "").replace(/-$/, "");
   const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
-  return Number(normalized.replace(/[^\d.-]/g, ""));
+  const amount = Number(normalized.replace(/[^\d.-]/g, ""));
+  return negative ? -Math.abs(amount) : amount;
 }
 
-function parseCsvLocally(csv: string): ParsedStatementItem[] {
+function parseCsvLocally(csv: string, fileName: string): ParsedStatementItem[] {
   const lines = csv.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2) return [];
-  const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
-  const headers = splitCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+  const delimiterProbe = lines.slice(0, 10).join("\n");
+  const delimiter = (delimiterProbe.match(/;/g)?.length ?? 0) > (delimiterProbe.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const headerRowIndex = lines.slice(0, 25).findIndex((line) => {
+    const normalized = splitCsvLine(line, delimiter).map(normalizeCsvHeader);
+    return normalized.some((header) => /descricao|historico|estabelecimento|lancamento|memo/.test(header)) && normalized.some((header) => /valor|amount|debito|credito/.test(header));
+  });
+  if (headerRowIndex < 0) return [];
+  const headers = splitCsvLine(lines[headerRowIndex], delimiter).map(normalizeCsvHeader);
   const find = (...names: string[]) => headers.findIndex((header) => names.some((name) => header === name || header.includes(name)));
   const descriptionIndex = find("descricao", "historico", "estabelecimento", "lancamento", "memo");
   const amountIndex = find("valor", "amount");
+  const debitIndex = find("debito", "debit", "saida");
+  const creditIndex = find("credito", "credit", "entrada");
   const dateIndex = find("data", "date");
   const typeIndex = find("tipo", "natureza");
   const categoryIndex = find("categoria", "category");
-  if (descriptionIndex < 0 || amountIndex < 0) return [];
-  return lines.slice(1).map((line): ParsedStatementItem | null => {
+  if (descriptionIndex < 0 || (amountIndex < 0 && debitIndex < 0 && creditIndex < 0)) return [];
+  const looksLikeCardInvoice = /fatura|cartao|card/i.test(fileName) || headers.some((header) => /parcela|cartao/.test(header));
+  return lines.slice(headerRowIndex + 1).map((line): ParsedStatementItem | null => {
     const row = splitCsvLine(line, delimiter);
     const description = row[descriptionIndex]?.trim() ?? "";
-    const signedAmount = csvAmount(row[amountIndex] ?? "");
+    const debit = debitIndex >= 0 ? csvAmount(row[debitIndex] ?? "") : 0;
+    const credit = creditIndex >= 0 ? csvAmount(row[creditIndex] ?? "") : 0;
+    const signedAmount = debit ? -Math.abs(debit) : credit ? Math.abs(credit) : csvAmount(row[amountIndex] ?? "");
     if (!description || !Number.isFinite(signedAmount) || signedAmount === 0) return null;
     const rawType = normalizeCsvHeader(row[typeIndex] ?? "");
-    const type = signedAmount < 0 || /despesa|debito|saida/.test(rawType) ? "despesa" : "receita";
+    const creditDescription = /pagamento|estorno|credito|reembolso/.test(normalizeCsvHeader(description));
+    const type = debit || signedAmount < 0 || /despesa|debito|saida/.test(rawType) || (looksLikeCardInvoice && !creditDescription) ? "despesa" : "receita";
     const date = dateIndex >= 0 ? csvDate(row[dateIndex] ?? "") : null;
     return { description, amountCents: Math.round(Math.abs(signedAmount) * 100), type, date, dueDate: date, plannedDate: date, status: type === "receita" ? "recebido" : "pago", priority: "importante", categoryName: categoryIndex >= 0 ? row[categoryIndex]?.trim() || null : null, cardName: null, notes: "Importado de CSV" };
   }).filter((item): item is ParsedStatementItem => item !== null);
@@ -262,7 +280,7 @@ export async function parseStatementFile(file: File): Promise<ParsedStatementIte
   if (extension === "csv") {
     const csv = await file.text();
     if (!csv.trim()) throw new Error("O arquivo CSV está vazio.");
-    const localItems = parseCsvLocally(csv);
+    const localItems = parseCsvLocally(csv, file.name);
     if (localItems.length > 0) return localItems;
     parts.push({ text: `Conteúdo do arquivo CSV:\n\n${csv.slice(0, 1_500_000)}` });
   } else {
@@ -280,6 +298,7 @@ export async function parseStatementFile(file: File): Promise<ParsedStatementIte
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0.1,
+      maxOutputTokens: 65536,
     },
   });
 

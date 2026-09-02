@@ -41,11 +41,13 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
   const [accountId, setAccountId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [sourceName, setSourceName] = useState("");
 
   const reset = () => {
     setItems(null);
     setError(null);
     setImporting(false);
+    setSourceName("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -57,6 +59,7 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setSourceName(file.name);
     setError(null);
     try {
       const parsed = await parseStatement.mutateAsync(file);
@@ -120,6 +123,9 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
     }
   };
 
+  const expenseTotal = items?.filter((item) => item.type === "despesa").reduce((total, item) => total + item.amountCents, 0) ?? 0;
+  const incomeTotal = items?.filter((item) => item.type === "receita").reduce((total, item) => total + item.amountCents, 0) ?? 0;
+
   return (
     <Dialog open={open} onClose={handleClose} title="Importar fatura ou extrato">
       {!items && (
@@ -155,7 +161,8 @@ export function ImportStatementDialog({ open, onClose }: { open: boolean; onClos
 
           <div className="flex flex-col gap-2">
             <Label>{items.length} lançamento(s) encontrado(s)</Label>
-            <p className="text-xs text-muted-500">Períodos identificados: {[...new Set(items.map(itemMonth))].join(" · ")}</p>
+            <div className="oc-panel !p-3 text-xs"><b className="block truncate">{sourceName}</b><div className="mt-2 grid grid-cols-3 gap-3 text-[var(--oc-muted)]"><span><b className="block text-sm text-[var(--oc-ink)]">{items.length}</b>linhas</span><span><b className="block text-sm text-coral-500">{Money.fromCents(expenseTotal).format()}</b>despesas</span><span><b className="block text-sm text-accent-500">{Money.fromCents(incomeTotal).format()}</b>receitas</span></div></div>
+            <p className="text-xs text-muted-500">Períodos identificados: {[...new Set(items.map(itemMonth))].join(" · ")}. Confira quantidade e totais com o documento antes de confirmar.</p>
             <ul className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto pr-1">
               {items.map((item) => (
                 <li key={item.id} className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm dark:border-border-dark dark:bg-ink-900">
